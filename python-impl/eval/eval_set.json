@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "version": "1.0",
+    "description": "智能客服 RAG 检索评测集。query + 相关文档 + 标准答案，用于量化检索质量。",
+    "note": "标注原则：expected_source 必须是语义真正相关的文档。知识库外问题 expected_source 为 null，用于检测幻觉率。"
+  },
+  "documents": [
+    {
+      "id": "doc_refund",
+      "source": "refund_policy.md",
+      "content": "退款政策：用户在购买后7天内可申请无理由退款，超过7天需提供合理原因。退款将在3-5个工作日内原路退回。"
+    },
+    {
+      "id": "doc_account",
+      "source": "account_guide.md",
+      "content": "开户流程：1.准备身份证原件 2.填写开户申请表 3.进行视频认证 4.设置交易密码 5.完成风险评估问卷。整个流程约需15-30分钟。"
+    },
+    {
+      "id": "doc_product",
+      "source": "product_faq.md",
+      "content": "我们的理财产品A年化收益率为3.5%-5.2%，投资期限为6个月至3年，最低投资金额10000元。注意：理财非存款，产品有风险，投资须谨慎。"
+    }
+  ],
+  "queries": [
+    {
+      "query": "怎么退款",
+      "expected_source": "refund_policy.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "退款流程是什么",
+      "expected_source": "refund_policy.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "我想申请退货怎么办",
+      "expected_source": "refund_policy.md",
+      "category": "in_domain_similar"
+    },
+    {
+      "query": "钱什么时候能退回来",
+      "expected_source": "refund_policy.md",
+      "category": "in_domain_colloquial"
+    },
+    {
+      "query": "超过七天还能退吗",
+      "expected_source": "refund_policy.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "开户需要准备什么",
+      "expected_source": "account_guide.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "开户流程有哪些步骤",
+      "expected_source": "account_guide.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "开户要多久能办好",
+      "expected_source": "account_guide.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "开户要带身份证吗",
+      "expected_source": "account_guide.md",
+      "category": "in_domain_colloquial"
+    },
+    {
+      "query": "理财产品A收益率多少",
+      "expected_source": "product_faq.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "买理财产品最低多少钱",
+      "expected_source": "product_faq.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "投资期限要多久",
+      "expected_source": "product_faq.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "理财有风险吗",
+      "expected_source": "product_faq.md",
+      "category": "in_domain"
+    },
+    {
+      "query": "你们公司年会在哪里办",
+      "expected_source": null,
+      "category": "out_of_domain"
+    },
+    {
+      "query": "客服电话号码是多少",
+      "expected_source": null,
+      "category": "out_of_domain"
+    },
+    {
+      "query": "支持支付宝付款吗",
+      "expected_source": null,
+      "category": "out_of_domain"
+    },
+    {
+      "query": "今天天气怎么样",
+      "expected_source": null,
+      "category": "out_of_domain_chitchat"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# 防止把 .env（含 API Key）打进镜像层
+# Dockerfile 使用 COPY . .，若不排除，Key 会永久留在镜像历史中
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.pytest_cache/
+
+# 数据与索引
+vector_store/
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/

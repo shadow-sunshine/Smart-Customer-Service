@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能客服多Agent系统 · 演示</title>
+<style>
+:root {
+  --bg: #14161a;
+  --panel: #1c1f26;
+  --panel-2: #23262e;
+  --border: #31353f;
+  --text: #e4e6eb;
+  --text-dim: #9aa0ad;
+  --text-faint: #6f7683;
+  --accent: #5b8cff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.title { font-size: 15px; font-weight: 500; }
+.subtitle { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.dot.on { background: var(--ok); }
+
+main { flex: 1; display: flex; min-height: 0; }
+
+/* 左：聊天 */
+.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.log { flex: 1; overflow-y: auto; padding: 20px; }
+.msg { margin-bottom: 18px; max-width: 78%; }
+.msg.user { margin-left: auto; }
+.bubble {
+  padding: 10px 13px;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg.user .bubble { background: var(--accent); color: #fff; }
+.msg.bot .bubble { background: var(--panel-2); border: 1px solid var(--border); }
+.meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tag {
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.tag.ok { color: var(--ok); border-color: #1d4429; }
+.tag.err { color: var(--err); border-color: #5c2626; }
+
+.composer {
+  border-top: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.composer textarea {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  resize: none;
+  height: 62px;
+  outline: none;
+}
+.composer textarea:focus { border-color: var(--accent); }
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 20px;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 右：侧栏 */
+.side {
+  width: 300px;
+  border-left: 1px solid var(--border);
+  padding: 18px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.side h2 {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin: 18px 0 8px;
+}
+.side h2:first-child { margin-top: 0; }
+.kv { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
+.kv b { color: var(--text); font-weight: 400; }
+.preset { display: flex; flex-direction: column; gap: 6px; }
+.preset button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  text-align: left;
+  padding: 8px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.preset button:hover { border-color: var(--accent); color: var(--text); }
+.note {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.7;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="title">智能客服多Agent系统</div>
+    <div class="subtitle">Supervisor 编排 · 知识检索 · 合规审查</div>
+  </div>
+  <div class="conn">
+    <span class="dot" id="dot"></span>
+    <span id="connText">检测中...</span>
+  </div>
+</header>
+
+<main>
+  <section class="chat">
+    <div class="log" id="log"></div>
+    <div class="composer">
+      <textarea id="input" placeholder="输入问题，Enter 发送，Shift+Enter 换行"></textarea>
+      <button id="send">发送</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <h2>会话状态</h2>
+    <div class="kv">
+      意图识别<br>
+      路由结果 <b id="sIntent">—</b><br>
+      合规审查 <b id="sCompliance">—</b><br>
+      会话 ID <b id="sSession" style="font-size:11px">—</b>
+    </div>
+
+    <h2>快捷提问</h2>
+    <div class="preset" id="preset"></div>
+
+    <h2>说明</h2>
+    <div class="note">
+      每次提问会经过：意图路由 → 知识检索 → 合规审查 → 汇总回复。右侧可看到路由结果与合规判定。
+    </div>
+  </aside>
+</main>
+
+<script>
+const API = location.origin;
+const log = document.getElementById('log');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+
+let sessionId = null;
+
+// 连接检测
+fetch(API + '/api/health')
+  .then(r => {
+    document.getElementById('dot').classList.add('on');
+    document.getElementById('connText').textContent = '已连接';
+  })
+  .catch(() => {
+    document.getElementById('connText').textContent = '未连接';
+  });
+
+// 快捷提问：覆盖知识库三类内容 + 一个知识库外问题
+const presets = [
+  ['怎么退款？', '知识库内'],
+  ['理财产品A的收益率是多少？', '知识库内'],
+  ['开户需要什么材料？', '知识库内'],
+  ['你们公司的年会在哪里办？', '知识库外（考察幻觉风险）'],
+  ['我要投诉，赔偿 5000 元', '合规敏感']
+];
+const presetBox = document.getElementById('preset');
+presets.forEach(([q, tag]) => {
+  const b = document.createElement('button');
+  b.textContent = q;
+  b.onclick = () => { input.value = q; ask(q); };
+  presetBox.appendChild(b);
+});
+
+function addMsg(role, text, meta) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + role;
+  const bub = document.createElement('div');
+  bub.className = 'bubble';
+  bub.textContent = text;
+  wrap.appendChild(bub);
+  if (meta) {
+    const m = document.createElement('div');
+    m.className = 'meta';
+    meta.forEach(t => {
+      const s = document.createElement('span');
+      s.className = 'tag' + (t.cls ? ' ' + t.cls : '');
+      s.textContent = t.text;
+      m.appendChild(s);
+    });
+    wrap.appendChild(m);
+  }
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+  return wrap;
+}
+
+function addPending() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  wrap.innerHTML = '<div class="bubble" style="color:#9aa0ad">正在检索知识库并生成回复…</div>';
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+  return wrap;
+}
+
+async function ask(q) {
+  if (!q.trim()) return;
+  addMsg('user', q);
+  const pending = addPending();
+
+  sendBtn.disabled = true;
+  input.disabled = true;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(API + '/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: q, user_id: 'web_user', session_id: sessionId })
+    });
+    const data = await res.json();
+    const ms = Math.round(performance.now() - t0);
+
+    if (!res.ok) {
+      pending.remove();
+      addMsg('bot', '请求失败：' + (data.detail || res.status));
+      return;
+    }
+
+    sessionId = data.session_id;
+    pending.remove();
+
+    // 从回复里抽出引用来源单独展示
+    const srcMatch = data.response.match(/\*\*参考来源\*\*：(.+)/);
+    let body = data.response.replace(/\n\n\*\*参考来源\*\*：.+$/, '');
+
+    const meta = [
+      { text: '意图 ' + data.intent },
+      { text: ms + ' ms' },
+      { text: '合规 ' + (data.compliance_passed ? '通过' : '拦截'), cls: data.compliance_passed ? 'ok' : 'err' }
+    ];
+    if (srcMatch) meta.push({ text: '来源 ' + srcMatch[1].trim() });
+
+    addMsg('bot', body, meta);
+
+    document.getElementById('sIntent').textContent = data.intent;
+    document.getElementById('sCompliance').textContent = data.compliance_passed ? '通过' : '拦截';
+    document.getElementById('sCompliance').style.color = data.compliance_passed ? 'var(--ok)' : 'var(--err)';
+    document.getElementById('sSession').textContent = data.session_id.slice(0, 8) + '…';
+  } catch (e) {
+    pending.remove();
+    addMsg('bot', '连接错误：' + e.message);
+  } finally {
+    sendBtn.disabled = false;
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+sendBtn.onclick = () => { const q = input.value; input.value = ''; ask(q); };
+input.onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const q = input.value; input.value = ''; ask(q);
+  }
+};
+
+// 首屏提示
+addMsg('bot', '你好，我是智能客服助手。\n可以问我退款政策、理财产品收益、开户流程等问题。右侧有快捷提问按钮。');
+input.focus();
+</script>
+</body>
+</html>
