@@ -36,6 +36,22 @@ COMPLIANCE_FALLBACK = "该回复需要人工复核后才能发送，已为您转
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 
+# RAG 节点的串行 LLM 调用次数：改写 + 重排 + 生成 = 3 次，
+# 单次 1-3 秒，因此需要比单次调用宽松得多的预算。
+RAG_TIMEOUT_SECONDS = 60.0
+
+# 各 Agent 的超时预算。默认 10s 对知识检索偏紧——
+# 它要串行经历 query 改写、LLM 重排、答案生成三次模型调用，
+# 网络抖动或模型排队时很容易超过 10s 被误判为超时。
+DEFAULT_AGENT_TIMEOUTS = {
+    "intent_router": 15.0,
+    "supervisor_route": 15.0,
+    "knowledge_rag": RAG_TIMEOUT_SECONDS,
+    "ticket_handler": 20.0,
+    "compliance_check": 20.0,
+    "synthesize": 15.0,
+}
+
 
 @dataclass
 class AgentRunResult:
@@ -65,9 +81,27 @@ class AgentExecutor:
         )
     """
 
-    def __init__(self, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        per_agent_timeouts: dict[str, float] | None = None,
+    ) -> None:
         self.timeout = timeout
+        # 各 Agent 可单独配置超时；未配置的回退到全局 timeout。
+        # 之所以需要差异化：RAG 节点要串行调 3 次 LLM，
+        # 用同一个 10s 预算会把正常请求误判为超时。
+        #
+        # 注意必须用 `is None` 判断而非 `or`：传入空字典 {} 时
+        # 应当表示"不使用任何差异化配置"，若用 or 会因为空字典为
+        # falsy 而错误地回退到默认配置。
+        if per_agent_timeouts is None:
+            self.per_agent_timeouts = dict(DEFAULT_AGENT_TIMEOUTS)
+        else:
+            self.per_agent_timeouts = dict(per_agent_timeouts)
         self.runs: list[AgentRunResult] = []
+
+    def _timeout_for(self, agent_name: str) -> float:
+        return float(self.per_agent_timeouts.get(agent_name, self.timeout))
 
     @staticmethod
     def _fallback_for(agent_name: str) -> str:
@@ -90,14 +124,15 @@ class AgentExecutor:
         保证整条链路不会因为单个节点失败而中断。
         """
         started = time.perf_counter()
+        timeout = self._timeout_for(agent_name)
         try:
-            result = await asyncio.wait_for(invoke(), timeout=self.timeout)
+            result = await asyncio.wait_for(invoke(), timeout=timeout)
             elapsed = int((time.perf_counter() - started) * 1000)
             self.runs.append(AgentRunResult(agent=agent_name, duration_ms=elapsed))
             return result
         except asyncio.TimeoutError:
             elapsed = int((time.perf_counter() - started) * 1000)
-            reason = f"timeout_after_{self.timeout}s"
+            reason = f"timeout_after_{timeout}s"
             self.runs.append(
                 AgentRunResult(
                     agent=agent_name,

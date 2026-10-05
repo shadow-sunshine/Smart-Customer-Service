@@ -52,13 +52,28 @@ class KnowledgeRAGAgent:
         self,
         llm: ChatOpenAI,
         long_term_memory: LongTermMemory | None = None,
-        relevance_threshold: float = 0.35,
+        relevance_threshold: float | None = None,
     ):
         self.llm = llm
         self.long_term_memory = long_term_memory or LongTermMemory()
-        # 相似度门限：低于此值认为知识库无相关信息。
-        # 这个值需要结合评测集调，不应凭感觉设定。
-        self.relevance_threshold = relevance_threshold
+        # 相似度门限交给 LongTermMemory 统一负责（见 long_term.search()），
+        # 这里不再重复设置。
+        #
+        # 之前这里硬编码了 0.35，而 LongTermMemory 用的是 0.01，
+        # 两处阈值不一致导致所有正常问题都被误判为「知识库外」而拒答
+        # （实测域内问题分数只有 0.03~0.09，全部低于 0.35）。
+        #
+        # 门禁必须在检索层做，因为只有那里掌握每篇文档的实际得分，
+        # 并且能在返回前就过滤掉零分文档——若等到这里再判断，
+        # LLM 重排可能已经把零分文档排到了首位。
+        #
+        # 若确需覆盖阈值，请通过 RELEVANCE_THRESHOLD 环境变量，
+        # 由 LongTermMemory 读取，保持单一数据源。
+        self.relevance_threshold = (
+            relevance_threshold
+            if relevance_threshold is not None
+            else self.long_term_memory.relevance_threshold
+        )
 
     @trace_agent_call("rag_query_rewrite")
     async def rewrite_query(self, original_query: str) -> str:

@@ -375,6 +375,7 @@ go run main.go
 | `EMBEDDING_MODEL` | 否 | `text-embedding-3-small` | `EMBEDDING_TYPE=openai` 时生效 |
 | `REDIS_URL` | 否 | `redis://localhost:6379/0` | 短期记忆连接串 |
 | `FAISS_INDEX_PATH` | 否 | `./vector_store/faiss_index` | 向量索引落盘路径 |
+| `RELEVANCE_THRESHOLD` | 否 | `0.01` | 相似度门限，需按当前语料标定 |
 | `OTEL_SERVICE_NAME` | 否 | `smart-cs-multi-agent` | 追踪服务名 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | 否 | 空 | OTLP 接收端，不设则输出到控制台 |
 | `HOST` / `PORT` | 否 | `0.0.0.0` / `8000` | 监听地址 |
@@ -511,7 +512,26 @@ services:
 
 ### embedding 用字符二元组效果如何
 
-在当前评测集上 Recall@1 为 100%，且完全离线。局限是它只能捕捉字面重合，对完全同义但用词不同的表达无能为力——这类场景需要 `openai` 后端的真实语义 embedding。
+在评测集上 Recall@1 为 100%，且完全离线。
+
+但它有明确局限：**无法处理同义替换**。实测「退钱」与「退款」的字符交集为空，Jaccard 恒为 0；「登录」与「开户」同理。当前实现靠在知识库里显式列出常见口语问法来覆盖这类情况，但这本质是打补丁。
+
+生产环境应切换到 `openai` 后端用真实语义 embedding。
+
+### 门限设多少合适
+
+没有通用值，必须按「当前语料 + 当前 embedding」实测标定：
+
+```bash
+# 扫描不同门限下的召回与拒答表现
+python -m eval.run_eval --backend keyword --threshold 0.01
+```
+
+也可以通过环境变量调整而不改代码：
+
+```bash
+RELEVANCE_THRESHOLD=0.005 python -m api.main
+```
 
 ### 短期记忆为什么没有生效
 
@@ -533,6 +553,7 @@ Supervisor 的路由决策会做归一化处理：先剥离非字母字符，再
 - **混合检索未实现。** 目前仅字符二元组一路，BM25 + 向量融合（RRF）待做
 - **Java 版与 Go 版未验证。** 仅确认代码完整，未构建运行
 - **重排依赖 LLM。** `knowledge_rag.py` 用 LLM 评估相关性重排，延迟较高，未接入专用 rerank 模型
+- **字符二元组无法处理同义替换。**「退钱」与「退款」字符交集为 0，相似度恒为 0；当前靠知识库显式列出口语问法覆盖，属打补丁方案
 - **门限基于小语料。** 0.01 由 3 篇文档得出，语料扩大后需重新标定
 
 ---

@@ -39,9 +39,13 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     global graph
 
+    # 注意：otel_config 在导入时已把 OTEL_EXPORTER_OTLP_ENDPOINT 从环境
+    # 变量中清除（避免 SDK 自动装配不可达的导出器），端点副本保存在
+    # otel_config._OTLP_ENDPOINT_ENV。这里传None 表示"沿用模块内保存的值"，
+    # 由 init_tracer 自行判断是否需要启用导出。
     init_tracer(
         service_name=os.getenv("OTEL_SERVICE_NAME", "smart-cs-multi-agent"),
-        otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+        otlp_endpoint=None,
     )
 
     graph = create_supervisor_graph(
@@ -60,6 +64,22 @@ async def lifespan(app: FastAPI):
     )
     long_term_memory.add_document(
         content="开户流程：1.准备身份证原件 2.填写开户申请表 3.进行视频认证 4.设置交易密码 5.完成风险评估问卷。整个流程约需15-30分钟。",
+        source="account_guide.md",
+    )
+    # 补充常见口语问法。字符二元组相似度只认字面重合，
+    # 且二元组必须连续出现（「退货」能匹配，「退钱」与「退款」匹配不到）。
+    # 因此文档里要用完整词组把常见问法串起来，让二字组合能够命中。
+    long_term_memory.add_document(
+        content="退款、退钱、退货、退款申请、怎么退款、怎么退钱、如何退货、"
+        "钱什么时候能退回来、申请退钱流程——以上问法均指退款业务。"
+        "统一处理规则：购买后7天内可申请无理由退款，超过7天需说明合理原因，"
+        "款项在3-5个工作日内原路退回原支付账户。",
+        source="refund_policy.md",
+    )
+    long_term_memory.add_document(
+        content="开户、开户流程、办理开户、注册账户、开通账户、开户需要什么材料——"
+        "以上问法均指开户业务。需准备身份证原件，填写开户申请表，"
+        "完成视频认证与风险评估问卷，全程约15-30分钟。",
         source="account_guide.md",
     )
 

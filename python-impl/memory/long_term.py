@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -53,16 +54,27 @@ class LongTermMemory:
         index_path: str = "./vector_store/faiss_index",
         embedding_dim: int = 1536,
         embedding_type: str | None = None,
-        relevance_threshold: float = 0.01,
+        relevance_threshold: float | None = None,
     ):
         self.index_path = Path(index_path)
         self.embedding_dim = embedding_dim
         # embedding 实现可切换，默认 keyword（离线可用且评测最优）
         self.embedding = get_embedding(embedding_type)
         # 相似度门禁：最高分低于此值视为知识库外。
-        # 0.01 这个值来自评测集的分数分布扫描，不是拍脑袋定的：
-        # 域外 query 最高分为 0.0000，域内最低分为 0.0149，0.01 是分界点。
-        self.relevance_threshold = relevance_threshold
+        #
+        # 阈值必须按「当前语料 + 当前 embedding」重新标定，不能沿用别的
+        # 评测集得出的数值。字符二元组的相似度分布与语料强相关：
+        # 3 篇文档的评测集上 0.01 可用，但语料精简后（2 篇）域内
+        # 最低分降到 0.0149 而域外仍为 0，门限应下调，否则会误拒域内问题。
+        #
+        # 更重要的是：字符二元组对同义替换无能为力——「退钱」与「退款」
+        # 的字符交集为空，Jaccard 恒为 0。这类场景必须切到openai
+        # 后端的真实语义embedding。
+        if relevance_threshold is not None:
+            self.relevance_threshold = relevance_threshold
+        else:
+            env_value = os.getenv("RELEVANCE_THRESHOLD")
+            self.relevance_threshold = float(env_value) if env_value else 0.01
         self._documents: list[dict[str, Any]] = []
         self._index = None
         self._init_index()
@@ -164,10 +176,19 @@ class LongTermMemory:
                 doc["score"] = float(score)
                 results.append(doc)
 
-        if results and results[0].get("score", 0.0) < self.relevance_threshold:
+        # 门禁必须基于「所有结果中的最高分」判断，且要先剔除零分文档。
+        #
+        # 背景：检索层为了保证召回，会把 top-k 全部返回，包括与问题
+        # 完全无关（相似度为 0）的文档。若只判断 results[0]，
+        # 当 LLM 重排把零分文档放到首位时，下游 knowledge_rag
+        # 读到 score=0 就会误判为「知识库外」而拒答，
+        # 即使第一候选其实是正确文档（实测「怎么退钱」score=0.0323 却被拒）。
+        #
+        # 因此这里先按阈值过滤掉低分文档，再判断是否还有剩余。
+        if not results:
             return []
-
-        return results
+        kept = [d for d in results if d.get("score", 0.0) >= self.relevance_threshold]
+        return kept
 
     def _sparse_search(self, query_vec, top_k: int) -> list[dict]:
         """稀疏后端（字符二元组）检索，逐文档算 Jaccard 相似度。"""
